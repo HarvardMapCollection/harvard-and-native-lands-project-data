@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harvard &amp; Native Lands — Property Map</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink: #23261f;
+    --paper: #efe8d8;
+    --paper-hi: #f8f3e6;
+    --paper-dim: #e3d9c1;
+    --line: #c8bc9c;
+    --muted: #746b56;
+    --accent: #8a5a2b;
+    --accent-deep: #5f3c1a;
+    --accent-soft: #d8b789;
+    --uncertain: #a1493b;
+    --shadow: 0 6px 24px rgba(20,18,10,0.28);
+  }
+  *{ box-sizing: border-box; }
+  html, body{ margin:0; padding:0; height:100%; font-family: 'Inter', sans-serif; color: var(--ink); }
+  #map{ position:absolute; inset:0; background:#0d0f0c; }
+
+  /* ---------- floating title panel ---------- */
+  .panel{
+    position:absolute; z-index:1000;
+    background: var(--paper-hi);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+  }
+  #title-panel{
+    top:16px; left:16px; width: 320px;
+    padding: 18px 20px 16px;
+  }
+  #title-panel h1{
+    font-family:'Source Serif 4', serif;
+    font-weight:600;
+    font-size: 21px;
+    line-height:1.25;
+    margin:0 0 4px;
+    color: var(--accent-deep);
+  }
+  #title-panel .sub{
+    font-size:12.5px;
+    color: var(--muted);
+    line-height:1.5;
+    margin: 0 0 12px;
+  }
+  #count-badge{
+    display:inline-block;
+    font-size:11.5px;
+    letter-spacing:.01em;
+    background: var(--paper-dim);
+    border: 1px solid var(--line);
+    padding: 3px 9px;
+    color: var(--accent-deep);
+    margin-bottom: 12px;
+  }
+  #search{
+    width:100%;
+    font-family:'Inter',sans-serif;
+    font-size: 13.5px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    outline:none;
+  }
+  #search:focus{ border-color: var(--accent); }
+  #search::placeholder{ color: #a99f88; }
+  #no-results{
+    display:none;
+    font-size:12px;
+    color: var(--muted);
+    margin-top:8px;
+  }
+
+  /* ---------- legend ---------- */
+  #legend{
+    bottom:20px; left:16px; padding: 12px 16px;
+    font-size:12px; color: var(--muted);
+  }
+  #legend .row{ display:flex; align-items:center; gap:9px; margin: 5px 0; }
+  #legend .swatch{ width:12px; height:12px; border-radius:50%; flex:0 0 auto; border: 1.5px solid var(--ink); }
+  #legend .swatch.certain{ background: var(--accent); }
+  #legend .swatch.uncertain{ background: transparent; border-color: var(--uncertain); border-style: dashed; }
+  #legend .title{ font-family:'Source Serif 4', serif; font-size:13px; color:var(--ink); margin-bottom:6px; font-weight:600; }
+
+  /* collapse legend/panel on small screens */
+  @media (max-width: 640px){
+    #title-panel{ width: calc(100vw - 32px); }
+    #legend{ display:none; }
+  }
+
+  /* ---------- custom marker ---------- */
+  .prop-marker{
+    width:16px; height:16px; border-radius:50%;
+    background: var(--accent);
+    border: 2px solid #fffaf0;
+    box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  }
+  .prop-marker.uncertain{
+    background: transparent;
+    border: 2px dashed var(--uncertain);
+  }
+  .marker-cluster-custom{
+    background: rgba(138,90,43,0.85);
+    border: 2px solid #fffaf0;
+    border-radius: 50%;
+    color: #fffaf0;
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size: 12px;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  /* ---------- popup ---------- */
+  .leaflet-popup-content-wrapper{
+    background: var(--paper-hi);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    box-shadow: var(--shadow);
+  }
+  .leaflet-popup-tip{ background: var(--paper-hi); border: 1px solid var(--line); }
+  .leaflet-popup-content{ margin: 0; width: 340px !important; }
+  .leaflet-popup-close-button{ color: var(--muted) !important; font-size: 20px !important; padding: 8px 10px 0 0 !important; }
+
+  .card{ padding: 18px 20px 16px; max-height: 62vh; overflow-y:auto; }
+  .card::-webkit-scrollbar{ width:7px; }
+  .card::-webkit-scrollbar-thumb{ background: var(--accent-soft); }
+
+  .card h2{
+    font-family:'Source Serif 4', serif;
+    font-weight:600;
+    font-size: 19px;
+    line-height:1.25;
+    margin: 0 0 3px;
+    color: var(--accent-deep);
+    padding-right: 14px;
+  }
+  .card .location-line{
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .card .geo-caption{
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
+    margin-bottom: 12px;
+  }
+  .card .flag{
+    display:inline-block;
+    font-size: 10.5px;
+    color: var(--uncertain);
+    border: 1px solid var(--uncertain);
+    padding: 1px 6px;
+    margin: 2px 0 12px;
+  }
+
+  .field-table{ width:100%; border-collapse: collapse; margin-bottom: 6px; }
+  .field-table tr{ border-top: 1px solid var(--paper-dim); }
+  .field-table tr:first-child{ border-top:none; }
+  .field-table td{ padding: 6px 0; vertical-align: top; font-size: 13px; line-height:1.45; }
+  .field-table td.k{
+    width: 108px; min-width:108px;
+    color: var(--muted);
+    font-size: 11.5px;
+    padding-right: 10px;
+    padding-top: 8px;
+  }
+  .field-table td.v{ color: var(--ink); }
+
+  .notes{
+    font-size: 12.5px;
+    color: var(--ink);
+    background: var(--paper-dim);
+    padding: 10px 12px;
+    margin: 10px 0 6px;
+    border-left: 3px solid var(--accent-soft);
+    line-height: 1.5;
+  }
+
+  .section-heading{
+    font-family:'Source Serif 4', serif;
+    font-size: 13.5px;
+    font-weight:600;
+    color: var(--accent-deep);
+    margin: 16px 0 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .source-group{ margin-bottom: 10px; }
+  .source-group .type-label{
+    font-size: 10.5px;
+    text-transform: none;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .source-item{ font-size: 12.5px; line-height:1.5; margin-bottom: 6px; }
+  .source-item a{ color: var(--accent-deep); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+  .source-item a:hover{ color: var(--accent); }
+  .source-item .locator{ color: var(--muted); }
+  .source-item .access-note{ display:block; color: var(--muted); font-style: italic; font-size: 11.5px; margin-top:1px; }
+
+  .geo-basis{ font-size: 12.5px; line-height:1.55; }
+  .geo-basis .k{ color: var(--muted); font-size:11.5px; }
+
+  /* attribution tweak */
+  .leaflet-control-attribution{ background: rgba(239,232,216,0.85) !important; font-size:10.5px; }
+
+  #loading{
+    position:absolute; z-index:2000; inset:0;
+    background: var(--ink); color: var(--paper);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Source Serif 4', serif; font-size:15px; letter-spacing:.02em;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="loading">Loading properties…</div>
+
+<div class="panel" id="title-panel">
+  <h1>Harvard &amp; Native Lands</h1>
+  <p class="sub">Properties acquired by Harvard from Native lands in the early colonial period, drawn from Harvard&rsquo;s archival records and student research.</p>
+  <div id="count-badge">0 properties mapped</div>
+  <input id="search" type="text" placeholder="Search by property or town…" autocomplete="off">
+  <div id="no-results">No properties match your search.</div>
+</div>
+
+<div class="panel" id="legend">
+  <div class="title">Location key</div>
+  <div class="row"><span class="swatch certain"></span> Modern town identified</div>
+  <div class="row"><span class="swatch uncertain"></span> Town identification uncertain</div>
+  <div class="row" style="margin-top:8px; color:var(--muted); font-size:11px;">All points are town centroids unless a boundary has been mapped.</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<script>
+const PROPERTIES_URL = "https://raw.githubusercontent.com/HarvardMapCollection/harvard-and-native-lands-project-data/main/properties.geojson";
+const SOURCES_URL    = "https://raw.githubusercontent.com/HarvardMapCollection/harvard-and-native-lands-project-data/main/sources.csv";
+
+// ---------- map + basemap ----------
+const map = L.map('map', { zoomControl: false, minZoom: 4, maxZoom: 18 }).setView([42.35, -71.3], 8);
+L.control.zoom({ position: 'topright' }).addTo(map);
+
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Imagery: Esri, Maxar, Earthstar Geographics',
+  maxZoom: 18
+}).addTo(map);
+
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Reference: Esri',
+  maxZoom: 18,
+  opacity: 0.9
+}).addTo(map);
+
+// ---------- helpers ----------
+function isEmpty(v){
+  return v === null || v === undefined || v === '' ||
+         (typeof v === 'string' && (v.trim() === '' || v.trim().toUpperCase() === 'N/A'));
+}
+
+function esc(str){
+  const d = document.createElement('div');
+  d.textContent = String(str);
+  return d.innerHTML;
+}
+
+// Alan's property fields, in popup display order. Blank/N/A values are skipped entirely.
+const FIELD_MAP = [
+  ['Historic_Town',     'Historic town'],
+  ['Acq_Date',          'Acquired'],
+  ['Acq_Type',          'Type of acquisition'],
+  ['Sellers_Grantors',  'Seller(s) / grantor(s)'],
+  ['Purchase_Price',    'Purchase price'],
+  ['Size',              'Size'],
+  ['Sale_Date',         'Sold'],
+  ['Sale_Price',        'Sale price'],
+  ['Purchasers',        'Purchaser(s)'],
+  ['Student_Project',   'Student project'],
+];
+
+const SOURCE_TYPE_ORDER = ['Records of Land and Property', 'College Book', 'Corporation Papers', 'County Deeds'];
+
+function renderSourceItem(src){
+  const title = esc(src.Title || 'Untitled source');
+  const hasUrl = !isEmpty(src.URL);
+  const titleHtml = hasUrl
+    ? `<a href="${esc(src.URL)}" target="_blank" rel="noopener">${title}</a>`
+    : title;
+
+  let locatorHtml = '';
+  if (src.Source_Type === 'College Book' && !isEmpty(src.Locator)) {
+    locatorHtml = ` <span class="locator">— p. ${esc(src.Locator)}</span>`;
+  } else if (src.Source_Type !== 'County Deeds' && src.Source_Type !== 'Records of Land and Property' && !isEmpty(src.Locator)) {
+    locatorHtml = ` <span class="locator">— ${esc(src.Locator)}</span>`;
+  }
+
+  let noteHtml = '';
+  if (!isEmpty(src.Access_Notes)) {
+    noteHtml = `<span class="access-note">${esc(src.Access_Notes)}</span>`;
+  }
+
+  return `<div class="source-item">${titleHtml}${locatorHtml}${noteHtml}</div>`;
+}
+
+function renderSourcesSection(sourceRows){
+  if (!sourceRows || sourceRows.length === 0) return '';
+
+  const byType = {};
+  sourceRows.forEach(s => {
+    const t = isEmpty(s.Source_Type) ? 'Other' : s.Source_Type;
+    (byType[t] = byType[t] || []).push(s);
+  });
+
+  const orderedTypes = [
+    ...SOURCE_TYPE_ORDER.filter(t => byType[t]),
+    ...Object.keys(byType).filter(t => !SOURCE_TYPE_ORDER.includes(t))
+  ];
+
+  const groups = orderedTypes.map(type => {
+    const items = byType[type].map(renderSourceItem).join('');
+    return `<div class="source-group"><div class="type-label">${esc(type)}</div>${items}</div>`;
+  }).join('');
+
+  return `<div class="section-heading">Sources</div>${groups}`;
+}
+
+function renderGeoBasisSection(p){
+  if (isEmpty(p.Geo_Basis_Type)) return '';
+
+  const rows = [];
+  rows.push(`<div><span class="k">Basis:</span> ${esc(p.Geo_Basis_Type)}</div>`);
+
+  if (!isEmpty(p.Geo_Source_Citation)) {
+    const citation = esc(p.Geo_Source_Citation);
+    const linked = !isEmpty(p.Geo_Source_URL)
+      ? `<a href="${esc(p.Geo_Source_URL)}" target="_blank" rel="noopener">${citation}</a>`
+      : citation;
+    rows.push(`<div>${linked}</div>`);
+  }
+  if (!isEmpty(p.Geo_Student_Attribution)) {
+    rows.push(`<div>Located by ${esc(p.Geo_Student_Attribution)}</div>`);
+  }
+  if (!isEmpty(p.Geo_Notes)) {
+    rows.push(`<div>${esc(p.Geo_Notes)}</div>`);
+  }
+
+  return `<div class="section-heading">How this location was determined</div><div class="geo-basis">${rows.join('')}</div>`;
+}
+
+function popupHtml(p, sourceRows){
+  const locBits = [p.Modern_Town, p.Modern_State].filter(x => !isEmpty(x)).join(', ');
+  const uncertain = (p.Loc_Certain || '').trim().toLowerCase() === 'no';
+
+  let fieldRows = '';
+  FIELD_MAP.forEach(([key, label]) => {
+    if (!isEmpty(p[key])) {
+      fieldRows += `<tr><td class="k">${esc(label)}</td><td class="v">${esc(p[key])}</td></tr>`;
+    }
+  });
+
+  const notesHtml = !isEmpty(p.Notes) ? `<div class="notes">${esc(p.Notes)}</div>` : '';
+  const flagHtml = uncertain ? `<div class="flag">Modern town identification uncertain</div>` : '';
+
+  let geocodeCaption = '';
+  if (!isEmpty(p.Geocode_Method)) {
+    geocodeCaption = `<div class="geo-caption">${esc(p.Geocode_Method)}</div>`;
+  }
+
+  return `
+    <div class="card">
+      <h2>${esc(p.Property_Name || 'Unnamed property')}</h2>
+      <div class="location-line">${esc(locBits || 'Location unknown')}</div>
+      ${geocodeCaption}
+      ${flagHtml}
+      <table class="field-table">${fieldRows}</table>
+      ${notesHtml}
+      ${renderSourcesSection(sourceRows)}
+      ${renderGeoBasisSection(p)}
+    </div>
+  `;
+}
+
+// ---------- load data ----------
+Promise.all([
+  fetch(PROPERTIES_URL).then(r => r.json()),
+  fetch(SOURCES_URL).then(r => r.text()).then(text => Papa.parse(text, { header: true, skipEmptyLines: true }).data)
+]).then(([geojson, sourceRows]) => {
+
+  document.getElementById('loading').style.display = 'none';
+
+  // group sources by Property_ID
+  const sourcesByProperty = {};
+  sourceRows.forEach(row => {
+    if (isEmpty(row.Property_ID)) return;
+    (sourcesByProperty[row.Property_ID] = sourcesByProperty[row.Property_ID] || []).push(row);
+  });
+
+  const pointFeatures = geojson.features.filter(f => f.geometry && f.geometry.type === 'Point');
+  const otherFeatures  = geojson.features.filter(f => f.geometry && f.geometry.type !== 'Point');
+
+  document.getElementById('count-badge').textContent = `${geojson.features.length} properties mapped`;
+
+  const markerIndex = []; // { marker, name, town }
+  const clusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 44,
+    iconCreateFunction: cluster => L.divIcon({
+      html: `<div class="marker-cluster-custom" style="width:${30 + Math.min(cluster.getChildCount(),20)}px; height:${30 + Math.min(cluster.getChildCount(),20)}px;">${cluster.getChildCount()}</div>`,
+      className: '', iconSize: null
+    })
+  });
+
+  pointFeatures.forEach(f => {
+    const p = f.properties;
+    const uncertain = (p.Loc_Certain || '').trim().toLowerCase() === 'no';
+    const [lng, lat] = f.geometry.coordinates;
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="prop-marker${uncertain ? ' uncertain' : ''}"></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+      popupAnchor: [0, -8]
+    });
+
+    const marker = L.marker([lat, lng], { icon });
+    marker.bindPopup(popupHtml(p, sourcesByProperty[p.Property_ID]), { maxWidth: 360, minWidth: 320 });
+    clusterGroup.addLayer(marker);
+
+    markerIndex.push({
+      marker,
+      searchText: `${p.Property_Name || ''} ${p.Historic_Town || ''} ${p.Modern_Town || ''}`.toLowerCase()
+    });
+  });
+
+  map.addLayer(clusterGroup);
+
+  // polygon / other geometry features (vectorized boundaries, once they exist)
+  if (otherFeatures.length) {
+    const polyLayer = L.geoJSON({ type: 'FeatureCollection', features: otherFeatures }, {
+      style: { color: '#8a5a2b', weight: 2, fillOpacity: 0.25, fillColor: '#c99b5f' },
+      onEachFeature: (feature, layer) => {
+        layer.bindPopup(popupHtml(feature.properties, sourcesByProperty[feature.properties.Property_ID]), { maxWidth: 360, minWidth: 320 });
+      }
+    }).addTo(map);
+  }
+
+  // ---------- search filter ----------
+  const searchInput = document.getElementById('search');
+  const noResults = document.getElementById('no-results');
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    clusterGroup.clearLayers();
+    let matchCount = 0;
+    markerIndex.forEach(entry => {
+      if (q === '' || entry.searchText.includes(q)) {
+        clusterGroup.addLayer(entry.marker);
+        matchCount++;
+      }
+    });
+    noResults.style.display = (q !== '' && matchCount === 0) ? 'block' : 'none';
+  });
+
+}).catch(err => {
+  document.getElementById('loading').innerHTML =
+    'Could not load property data.<br><span style="font-size:12px;opacity:.8;">' + esc(err.message) + '</span>';
+  console.error(err);
+});
+</script>
+
+</body>
+</html>
